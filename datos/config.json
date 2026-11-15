@@ -1,0 +1,234 @@
+{
+  "seed": 42,
+  "inicio": "2026-11-01T00:00:00",
+  "dias_historial": 7,
+  "intervalo_min": 10,
+  "n_maquinas": 30,
+  "proporcion_con_falla": 0.2,
+  "horas_degradacion": 48,
+  "horas_etiqueta_falla": 24,
+  "horas_uso_inicial": [
+    800,
+    6000
+  ],
+  "prob_estado": {
+    "operando": 0.8,
+    "detenida": 0.2
+  },
+  "rpm_ralenti": 800,
+  "ruido_ubicacion_grados": 0.0004,
+  "zonas": [
+    {
+      "nombre": "Obra Norte",
+      "lat": -11.95,
+      "lon": -77.05
+    },
+    {
+      "nombre": "Obra Sur",
+      "lat": -12.2,
+      "lon": -76.95
+    },
+    {
+      "nombre": "Cantera Este",
+      "lat": -12.05,
+      "lon": -76.8
+    }
+  ],
+  "modelos": [
+    {
+      "modelo": "EX-200",
+      "tipo": "excavadora",
+      "cantidad_relativa": 3,
+      "intervalo_mant_horas": 250,
+      "sensores": {
+        "temperatura": {
+          "media": 82,
+          "desv": 3,
+          "delta_falla": 28
+        },
+        "vibracion": {
+          "media": 3.2,
+          "desv": 0.4,
+          "delta_falla": 5.0
+        },
+        "presion": {
+          "media": 210,
+          "desv": 8,
+          "delta_falla": -50
+        },
+        "combustible": {
+          "media": 28,
+          "desv": 3,
+          "delta_falla": 0
+        },
+        "carga": {
+          "media": 65,
+          "desv": 10,
+          "delta_falla": 0
+        },
+        "velocidad": {
+          "media": 4,
+          "desv": 1,
+          "delta_falla": 0
+        },
+        "rpm": {
+          "media": 1700,
+          "desv": 60,
+          "delta_falla": 150
+        }
+      }
+    },
+    {
+      "modelo": "VK-30",
+      "tipo": "volquete",
+      "cantidad_relativa": 3,
+      "intervalo_mant_horas": 300,
+      "sensores": {
+        "temperatura": {
+          "media": 78,
+          "desv": 3,
+          "delta_falla": 24
+        },
+        "vibracion": {
+          "media": 2.6,
+          "desv": 0.3,
+          "delta_falla": 4.2
+        },
+        "presion": {
+          "media": 180,
+          "desv": 7,
+          "delta_falla": -40
+        },
+        "combustible": {
+          "media": 35,
+          "desv": 4,
+          "delta_falla": 0
+        },
+        "carga": {
+          "media": 70,
+          "desv": 12,
+          "delta_falla": 0
+        },
+        "velocidad": {
+          "media": 32,
+          "desv": 6,
+          "delta_falla": 0
+        },
+        "rpm": {
+          "media": 1900,
+          "desv": 80,
+          "delta_falla": 180
+        }
+      }
+    },
+    {
+      "modelo": "CG-90",
+      "tipo": "cargador",
+      "cantidad_relativa": 2,
+      "intervalo_mant_horas": 200,
+      "sensores": {
+        "temperatura": {
+          "media": 80,
+          "desv": 3,
+          "delta_falla": 26
+        },
+        "vibracion": {
+          "media": 3.0,
+          "desv": 0.4,
+          "delta_falla": 4.6
+        },
+        "presion": {
+          "media": 195,
+          "desv": 8,
+          "delta_falla": -45
+        },
+        "combustible": {
+          "media": 30,
+          "desv": 3,
+          "delta_falla": 0
+        },
+        "carga": {
+          "media": 60,
+          "desv": 10,
+          "delta_falla": 0
+        },
+        "velocidad": {
+          "media": 12,
+          "desv": 3,
+          "delta_falla": 0
+        },
+        "rpm": {
+          "media": 1800,
+          "desv": 70,
+          "delta_falla": 160
+        }
+      }
+    }
+  ],
+  "causas_falla": [
+    {
+      "causa": "sobrecalentamiento del motor",
+      "componente": "motor",
+      "variable": "temperatura"
+    },
+    {
+      "causa": "desgaste de rodamientos",
+      "componente": "rodamiento",
+      "variable": "vibracion"
+    },
+    {
+      "causa": "perdida de presion hidraulica",
+      "componente": "bomba_hidraulica",
+      "variable": "presion"
+    }
+  ],
+  "tecnicos": {
+    "cantidad": 10,
+    "especialidades": [
+      "motor",
+      "hidraulica",
+      "electrico",
+      "rodamientos"
+    ],
+    "prob_disponible": 0.7
+  },
+  "repuestos": [
+    {
+      "nombre": "kit de reparacion de motor",
+      "componente": "motor",
+      "stock": [
+        0,
+        3
+      ]
+    },
+    {
+      "nombre": "bomba hidraulica",
+      "componente": "bomba_hidraulica",
+      "stock": [
+        0,
+        4
+      ]
+    },
+    {
+      "nombre": "kit de rodamientos",
+      "componente": "rodamiento",
+      "stock": [
+        0,
+        8
+      ]
+    }
+  ],
+  "proporcion_en_riesgo": 0.15,
+  "combustible_anomalo": {
+    "proporcion": 0.15,
+    "factor": [
+      1.4,
+      1.8
+    ]
+  },
+  "combustible_ralenti_factor": 0.3,
+  "umbrales_clasificacion": {
+    "urgente": 0.7,
+    "preventivo": 0.35
+  }
+}
