@@ -1,0 +1,249 @@
+org: luisnieva
+service: flujo3-optimizacion
+
+# Flujo 3 - Optimizacion operativa (ArquiFusion Corp, Grupo 13)
+# Despliegue:  serverless deploy --param="email=tu_correo@dominio.com"
+#   --param="crearCompartidas=false"  -> si otra persona ya creo en la cuenta el bucket y las tablas compartidas
+
+provider:
+  name: aws
+  runtime: python3.12
+  region: us-east-1
+  memorySize: 512
+  timeout: 60
+  iam:
+    role: arn:aws:iam::${aws:accountId}:role/LabRole
+  apiGateway:
+    apiKeys:
+      - name: flujo3-key
+  environment:
+    BUCKET_LECTURAS: ${self:custom.bucket}
+    T_MAQUINAS: t_maquinas
+    T_MANTENIMIENTO: t_mantenimiento
+    T_RESULTADOS: t_resultados
+    T_REPUESTOS: t_repuestos
+    T_PEDIDOS_REPUESTO: t_pedidos_repuesto
+    T_INDICADORES: t_indicadores
+    T_PLAN: t_plan
+    TOPIC_REPORTES:
+      Ref: TemaReportes
+    PARAM_GCP_URL: /arquifusion/gcp/url
+    PARAM_GCP_KEY: /arquifusion/gcp/api-key
+    VENTANA_DIAS: "7"
+    INTERVALO_MIN: "10"
+    HORIZONTE_DIAS: "14"
+    USO_DIARIO_HORAS: "8"
+    UMBRAL_RIESGO_URGENTE: "0.7"
+    UMBRAL_RIESGO_PREVENTIVO: "0.35"
+    MAPA_VARIABLE_COMPONENTE: '{"temperatura":"motor","vibracion":"rodamiento","presion":"bomba_hidraulica"}'
+
+custom:
+  bucket: arquifusion-g13-lecturas-${aws:accountId}
+
+package:
+  patterns:
+    - '!**'
+    - '*.py'
+
+functions:
+  analizarCombustible:
+    handler: analizar_combustible.lambda_handler
+  calcularProductividad:
+    handler: calcular_productividad.lambda_handler
+  planificarMantenimiento:
+    handler: planificar_mantenimiento.lambda_handler
+  consolidarReportes:
+    handler: consolidar_reportes.lambda_handler
+  consultarIndicadores:
+    handler: consultar_indicadores.lambda_handler
+    timeout: 20
+    events:
+      - http:
+          path: /indicadores
+          method: get
+          cors: true
+          private: true
+  consultarPlan:
+    handler: consultar_plan.lambda_handler
+    timeout: 20
+    events:
+      - http:
+          path: /plan
+          method: get
+          cors: true
+          private: true
+
+resources:
+  Conditions:
+    CrearCompartidas:
+      Fn::Equals:
+        - "${param:crearCompartidas, 'true'}"
+        - "true"
+
+  Resources:
+    # ---------- recursos COMPARTIDOS con los Flujos 1 y 2 (solo se crean si crearCompartidas=true) ----------
+    BucketLecturas:
+      Type: AWS::S3::Bucket
+      Condition: CrearCompartidas
+      Properties:
+        BucketName: ${self:custom.bucket}
+
+    TablaMaquinas:
+      Type: AWS::DynamoDB::Table
+      Condition: CrearCompartidas
+      Properties:
+        TableName: t_maquinas
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - {AttributeName: machine_id, AttributeType: S}
+        KeySchema:
+          - {AttributeName: machine_id, KeyType: HASH}
+
+    TablaMantenimiento:
+      Type: AWS::DynamoDB::Table
+      Condition: CrearCompartidas
+      Properties:
+        TableName: t_mantenimiento
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - {AttributeName: machine_id, AttributeType: S}
+          - {AttributeName: registro_id, AttributeType: S}
+        KeySchema:
+          - {AttributeName: machine_id, KeyType: HASH}
+          - {AttributeName: registro_id, KeyType: RANGE}
+
+    TablaResultados:
+      Type: AWS::DynamoDB::Table
+      Condition: CrearCompartidas
+      Properties:
+        TableName: t_resultados
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - {AttributeName: machine_id, AttributeType: S}
+          - {AttributeName: timestamp, AttributeType: S}
+        KeySchema:
+          - {AttributeName: machine_id, KeyType: HASH}
+          - {AttributeName: timestamp, KeyType: RANGE}
+
+    TablaRepuestos:
+      Type: AWS::DynamoDB::Table
+      Condition: CrearCompartidas
+      Properties:
+        TableName: t_repuestos
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - {AttributeName: repuesto_id, AttributeType: S}
+          - {AttributeName: almacen_zona, AttributeType: S}
+        KeySchema:
+          - {AttributeName: repuesto_id, KeyType: HASH}
+          - {AttributeName: almacen_zona, KeyType: RANGE}
+
+    TablaPedidosRepuesto:
+      Type: AWS::DynamoDB::Table
+      Condition: CrearCompartidas
+      Properties:
+        TableName: t_pedidos_repuesto
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - {AttributeName: pedido_id, AttributeType: S}
+        KeySchema:
+          - {AttributeName: pedido_id, KeyType: HASH}
+
+    # ---------- recursos PROPIOS del Flujo 3 ----------
+    TablaIndicadores:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: t_indicadores
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - {AttributeName: fecha, AttributeType: S}
+          - {AttributeName: clave, AttributeType: S}
+        KeySchema:
+          - {AttributeName: fecha, KeyType: HASH}
+          - {AttributeName: clave, KeyType: RANGE}
+
+    TablaPlan:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: t_plan
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - {AttributeName: fecha, AttributeType: S}
+          - {AttributeName: clave, AttributeType: S}
+        KeySchema:
+          - {AttributeName: fecha, KeyType: HASH}
+          - {AttributeName: clave, KeyType: RANGE}
+
+    TemaReportes:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: TemaReportes
+
+    SuscripcionSupervisor:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: {Ref: TemaReportes}
+        Protocol: email
+        Endpoint: ${param:emailSupervisor, param:email}
+        FilterPolicy:
+          rol: [supervisor]
+
+    SuscripcionLogistica:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: {Ref: TemaReportes}
+        Protocol: email
+        Endpoint: ${param:emailLogistica, param:email}
+        FilterPolicy:
+          rol: [logistica]
+
+    SuscripcionGerencia:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: {Ref: TemaReportes}
+        Protocol: email
+        Endpoint: ${param:emailGerencia, param:email}
+        FilterPolicy:
+          rol: [gerencia]
+
+    # ---------- Step Functions: tres ramas en paralelo y cierre ----------
+    # (la definicion se arma con Fn::Join para insertar los ARN de las Lambdas; no editar a mano)
+    MaquinaOptimizacion:
+      Type: AWS::StepFunctions::StateMachine
+      Properties:
+        StateMachineName: FlujoOptimizacionOperativa
+        RoleArn: arn:aws:iam::${aws:accountId}:role/LabRole
+        DefinitionString:
+          Fn::Join:
+            - ""
+            -
+              - "{\"Comment\":\"Flujo 3 - optimizacion operativa diaria\",\"StartAt\":\"RamasEnParalelo\",\"States\":{\"RamasEnParalelo\":{\"Type\":\"Parallel\",\"Branches\":[{\"StartAt\":\"AnalizarCombustible\",\"States\":{\"AnalizarCombustible\":{\"Type\":\"Task\",\"Resource\":\"arn:aws:states:::lambda:invoke\",\"Parameters\":{\"FunctionName\":\""
+              - Fn::GetAtt: [AnalizarCombustibleLambdaFunction, Arn]
+              - "\",\"Payload.$\":\"$\"},\"OutputPath\":\"$.Payload\",\"Retry\":[{\"ErrorEquals\":[\"States.ALL\"],\"IntervalSeconds\":5,\"MaxAttempts\":2,\"BackoffRate\":2.0}],\"End\":true}}},{\"StartAt\":\"CalcularProductividad\",\"States\":{\"CalcularProductividad\":{\"Type\":\"Task\",\"Resource\":\"arn:aws:states:::lambda:invoke\",\"Parameters\":{\"FunctionName\":\""
+              - Fn::GetAtt: [CalcularProductividadLambdaFunction, Arn]
+              - "\",\"Payload.$\":\"$\"},\"OutputPath\":\"$.Payload\",\"Retry\":[{\"ErrorEquals\":[\"States.ALL\"],\"IntervalSeconds\":5,\"MaxAttempts\":2,\"BackoffRate\":2.0}],\"End\":true}}},{\"StartAt\":\"PlanificarMantenimiento\",\"States\":{\"PlanificarMantenimiento\":{\"Type\":\"Task\",\"Resource\":\"arn:aws:states:::lambda:invoke\",\"Parameters\":{\"FunctionName\":\""
+              - Fn::GetAtt: [PlanificarMantenimientoLambdaFunction, Arn]
+              - "\",\"Payload.$\":\"$\"},\"OutputPath\":\"$.Payload\",\"Retry\":[{\"ErrorEquals\":[\"States.ALL\"],\"IntervalSeconds\":5,\"MaxAttempts\":2,\"BackoffRate\":2.0}],\"End\":true}}}],\"Next\":\"ConsolidarReportes\",\"Catch\":[{\"ErrorEquals\":[\"States.ALL\"],\"ResultPath\":\"$.error\",\"Next\":\"NotificarError\"}]},\"ConsolidarReportes\":{\"Type\":\"Task\",\"Resource\":\"arn:aws:states:::lambda:invoke\",\"Parameters\":{\"FunctionName\":\""
+              - Fn::GetAtt: [ConsolidarReportesLambdaFunction, Arn]
+              - "\",\"Payload.$\":\"$\"},\"OutputPath\":\"$.Payload\",\"Retry\":[{\"ErrorEquals\":[\"States.ALL\"],\"IntervalSeconds\":5,\"MaxAttempts\":2,\"BackoffRate\":2.0}],\"End\":true,\"Catch\":[{\"ErrorEquals\":[\"States.ALL\"],\"ResultPath\":\"$.error\",\"Next\":\"NotificarError\"}]},\"NotificarError\":{\"Type\":\"Task\",\"Resource\":\"arn:aws:states:::sns:publish\",\"Parameters\":{\"TopicArn\":\""
+              - Ref: TemaReportes
+              - "\",\"Subject\":\"Flujo 3 - FALLO la optimizacion diaria\",\"Message.$\":\"States.Format('Fallo la optimizacion diaria. Detalle: {}', $.error.Cause)\",\"MessageAttributes\":{\"rol\":{\"DataType\":\"String\",\"StringValue\":\"supervisor\"}}},\"End\":true}}}"
+
+    # ---------- EventBridge: corre todos los dias a las 02:00 hora de Lima (07:00 UTC) ----------
+    ReglaOptimizacionDiaria:
+      Type: AWS::Events::Rule
+      Properties:
+        Name: flujo3-optimizacion-diaria
+        ScheduleExpression: cron(0 7 * * ? *)
+        State: ENABLED
+        Targets:
+          - Id: FlujoOptimizacionOperativa
+            Arn: {Ref: MaquinaOptimizacion}
+            RoleArn: arn:aws:iam::${aws:accountId}:role/LabRole
+            Input: "{}"
+
+  Outputs:
+    ArnMaquinaOptimizacion:
+      Value: {Ref: MaquinaOptimizacion}
+    ArnTemaReportes:
+      Value: {Ref: TemaReportes}
