@@ -16,6 +16,7 @@ import boto3
 
 TABLAS = {"maquinas": "t_maquinas", "mantenimiento": "t_mantenimiento",
           "resultados": "t_resultados", "repuestos": "t_repuestos"}
+TABLAS_OPCIONALES = {"tecnicos": "t_tecnicos"}   # existe solo si el Flujo 2 esta desplegado en la misma cuenta
 
 
 def a_dynamo(obj):
@@ -24,6 +25,21 @@ def a_dynamo(obj):
 
 def cargar_tablas(ddb, carpeta):
     for archivo, nombre in TABLAS.items():
+        with open(os.path.join(carpeta, f"{archivo}.json"), encoding="utf-8") as f:
+            filas = json.load(f)
+        with ddb.Table(nombre).batch_writer() as lote:
+            for fila in filas:
+                lote.put_item(Item=a_dynamo(fila))
+        print(f"  {nombre}: {len(filas)} registros")
+
+
+def cargar_opcionales(ddb, carpeta):
+    for archivo, nombre in TABLAS_OPCIONALES.items():
+        try:
+            ddb.meta.client.describe_table(TableName=nombre)
+        except Exception:
+            print(f"  {nombre}: no existe en esta cuenta, se omite")
+            continue
         with open(os.path.join(carpeta, f"{archivo}.json"), encoding="utf-8") as f:
             filas = json.load(f)
         with ddb.Table(nombre).batch_writer() as lote:
@@ -64,6 +80,7 @@ def main():
     print(f"Cuenta {cuenta} | bucket {bucket}")
     print("Tablas:")
     cargar_tablas(sesion.resource("dynamodb"), a.dir)
+    cargar_opcionales(sesion.resource("dynamodb"), a.dir)
     print("Lecturas:")
     cargar_lecturas(sesion.client("s3"), bucket, a.dir)
     print("Listo.")

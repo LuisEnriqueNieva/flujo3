@@ -61,7 +61,7 @@ python generar_datos.py config.json salida
 python cargar_aws.py
 ```
 
-Sube el historial a `s3://arquifusion-g13-lecturas-<cuenta>/lecturas/AAAA-MM-DD/` y llena `t_maquinas`, `t_mantenimiento`, `t_resultados` y `t_repuestos`.
+Las zonas son las del Flujo 2: **Lima Norte, Lima Centro y Lima Sur**. Sube el historial a `s3://arquifusion-g13-lecturas-<cuenta>/lecturas/AAAA-MM-DD/` y llena `t_maquinas`, `t_mantenimiento`, `t_resultados` y `t_repuestos`.
 Todo lo simulado sale de `datos/config.json` (modelos, zonas, rangos de sensores, repuestos…): se cambia ahí, no en el código.
 
 ## 4. Google Cloud (Cloud Run)
@@ -112,11 +112,11 @@ Todo el contenido de esta carpeta **menos** lo que ya excluye `.gitignore` (`dat
 | Qué | Dónde / nombre | Quién escribe | Campos clave |
 |---|---|---|---|
 | Historial de lecturas | `s3://arquifusion-g13-lecturas-<cuenta>/lecturas/AAAA-MM-DD/*.jsonl` (una lectura JSON por línea) | Flujo 1 (Ingesta) | `machine_id, timestamp, lat, lon, temperatura, vibracion, presion, combustible (L/h), carga, velocidad, rpm, horas_uso, estado` |
-| `t_maquinas` | PK `machine_id` | Flujo 1 | `tipo, modelo, zona, horas_uso, intervalo_mant_horas, estado` |
+| `t_maquinas` | PK `machine_id` (sin sufijo `-dev`) | Flujo 1 | `tipo, modelo, zona, horas_uso, intervalo_mant_horas, estado, repuesto_requerido, operador_email` |
 | `t_resultados` | PK `machine_id`, SK `timestamp` | Flujo 1 | `prob_falla, puntaje_anomalia, clasificacion, variable_principal` |
 | `t_mantenimiento` | PK `machine_id`, SK `registro_id` | carga inicial | `fecha, tipo (preventivo/correctivo), horas_al_momento, falla, causa, componente` |
-| `t_repuestos` | PK `repuesto_id`, SK `almacen_zona` | carga inicial / Flujo 2 | `nombre, componente, stock` |
-| `t_pedidos_repuesto` | PK `pedido_id` | **Flujo 2** (`SolicitarRepuesto`) | `repuesto_id, componente, cantidad, estado ("pendiente"/...), incidente_id, machine_id, fecha` |
+| `t_repuestos` | PK `zona`, SK `repuesto_id` (igual que el Flujo 2) | carga inicial / Flujo 2 | `nombre, stock` (+ `componente`, opcional: si falta se deduce del `repuesto_id`) |
+| `t_pedidos_repuesto` | PK `pedido_id`, índice `EstadoFechaIndex` (`estado`, `fecha`) | **Flujo 2** (`SolicitarRepuesto`) | `repuesto_id, cantidad, estado, fecha, zona, incidente_id, machine_id`. Estados: `PENDIENTE`, `EN_PROCESO` (el Flujo 3 los suma como oferta futura) y `ATENDIDO` (ya no cuenta) |
 | `t_indicadores`, `t_plan` | PK `fecha`, SK `clave` | **Flujo 3** | — |
 
 No hay SNS ni SQS compartidos con el Flujo 2: **no se necesitan ARN**, solo los nombres de tablas y bucket de esta tabla (siempre que todo viva en la misma cuenta de AWS).

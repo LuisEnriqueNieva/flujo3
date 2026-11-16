@@ -27,7 +27,7 @@ from moto import mock_aws
 DEFINICIONES = {
     "t_maquinas": [("machine_id", "HASH")], "t_mantenimiento": [("machine_id", "HASH"), ("registro_id", "RANGE")],
     "t_resultados": [("machine_id", "HASH"), ("timestamp", "RANGE")],
-    "t_repuestos": [("repuesto_id", "HASH"), ("almacen_zona", "RANGE")],
+    "t_repuestos": [("zona", "HASH"), ("repuesto_id", "RANGE")],
     "t_pedidos_repuesto": [("pedido_id", "HASH")],
     "t_indicadores": [("fecha", "HASH"), ("clave", "RANGE")], "t_plan": [("fecha", "HASH"), ("clave", "RANGE")]}
 
@@ -36,9 +36,16 @@ DEFINICIONES = {
 def main():
     ddb = boto3.resource("dynamodb")
     for nombre, claves in DEFINICIONES.items():
+        attrs = {k for k, _ in claves}
+        extra = {}
+        if nombre == "t_pedidos_repuesto":      # igual que en el Flujo 2: indice por estado y fecha
+            attrs |= {"estado", "fecha"}
+            extra["GlobalSecondaryIndexes"] = [{"IndexName": "EstadoFechaIndex", "Projection": {"ProjectionType": "ALL"},
+                                                "KeySchema": [{"AttributeName": "estado", "KeyType": "HASH"},
+                                                              {"AttributeName": "fecha", "KeyType": "RANGE"}]}]
         ddb.create_table(TableName=nombre, BillingMode="PAY_PER_REQUEST",
-                         AttributeDefinitions=[{"AttributeName": k, "AttributeType": "S"} for k, _ in claves],
-                         KeySchema=[{"AttributeName": k, "KeyType": t} for k, t in claves])
+                         AttributeDefinitions=[{"AttributeName": k, "AttributeType": "S"} for k in sorted(attrs)],
+                         KeySchema=[{"AttributeName": k, "KeyType": t} for k, t in claves], **extra)
     s3 = boto3.client("s3")
     s3.create_bucket(Bucket=os.environ["BUCKET_LECTURAS"])
     ssm = boto3.client("ssm")
@@ -63,8 +70,11 @@ def main():
     cargar_aws.cargar_tablas(ddb, carpeta)
     cargar_aws.cargar_lecturas(s3, os.environ["BUCKET_LECTURAS"], carpeta)
     # pedido pendiente (lo que escribiria el Flujo 2)
-    ddb.Table("t_pedidos_repuesto").put_item(Item={"pedido_id": "PED-1", "componente": "motor", "cantidad": 1,
-                                                  "estado": "pendiente"})
+    # Un pedido en el formato exacto del Flujo 2 (sin `componente`; estado en mayusculas)
+    ddb.Table("t_pedidos_repuesto").put_item(Item={"pedido_id": "PED-1", "repuesto_id": "REP-002", "cantidad": 2,
+                                                  "estado": "PENDIENTE", "fecha": "2026-11-14", "zona": "Lima Norte"})
+    ddb.Table("t_pedidos_repuesto").put_item(Item={"pedido_id": "PED-0", "repuesto_id": "REP-002", "cantidad": 5,
+                                                  "estado": "ATENDIDO", "fecha": "2026-11-01", "zona": "Lima Norte"})
 
     # Cloud Run simulado: las Lambdas llaman al servicio Flask en memoria
     import comun
@@ -96,6 +106,8 @@ def main():
     c = planificar_mantenimiento.lambda_handler(evento, None)
     print(json.dumps(c, ensure_ascii=False))
     assert c["mantenimiento"]["urgentes"] + c["mantenimiento"]["programar"] > 0
+    bomba = next(r for r in c["reposicion"] if r["componente"] == "bomba_hidraulica")
+    assert bomba["pendientes"] == 2, bomba           # cuenta el PENDIENTE y NO el ATENDIDO
 
     print("\n== Consolidar (SNS) ==")
     out = consolidar_reportes.lambda_handler([a, b, c], None)

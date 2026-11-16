@@ -10,9 +10,25 @@ import os
 from collections import defaultdict
 from datetime import date, timedelta
 
-from comun import escanear, fecha_ejecucion, guardar_lote, llamar_cloud_run, tabla
+from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError
 
+from comun import consultar, escanear, fecha_ejecucion, guardar_lote, llamar_cloud_run, tabla
+
+REPUESTO_COMP_DEFECTO = '{"REP-001": "motor", "REP-002": "bomba_hidraulica", "REP-003": "rodamiento"}'
+ESTADOS_ABIERTOS = ("PENDIENTE", "EN_PROCESO")   # contrato del Flujo 2 (t_pedidos_repuesto.estado)
 MAPA_DEFECTO = '{"temperatura": "motor", "vibracion": "rodamiento", "presion": "bomba_hidraulica"}'
+
+
+def pedidos_abiertos(t):
+    """Pedidos por llegar: PENDIENTE y EN_PROCESO. Usa el indice EstadoFechaIndex; si no existe, hace Scan."""
+    try:
+        out = []
+        for est in ESTADOS_ABIERTOS:
+            out += consultar(t, IndexName="EstadoFechaIndex", KeyConditionExpression=Key("estado").eq(est))
+        return out
+    except ClientError:
+        return [p for p in escanear(t) if str(p.get("estado", "")).upper() in ESTADOS_ABIERTOS]
 
 
 def lambda_handler(event, context):
@@ -23,12 +39,16 @@ def lambda_handler(event, context):
     u_urg = float(os.environ.get("UMBRAL_RIESGO_URGENTE", "0.7"))
     u_prev = float(os.environ.get("UMBRAL_RIESGO_PREVENTIVO", "0.35"))
     mapa = json.loads(os.environ.get("MAPA_VARIABLE_COMPONENTE", MAPA_DEFECTO))
+    mapa_rep = json.loads(os.environ.get("REPUESTO_COMPONENTE", REPUESTO_COMP_DEFECTO))
+
+    def comp_de(item):                 # el Flujo 2 no guarda `componente`: se deduce del repuesto_id
+        return item.get("componente") or mapa_rep.get(item.get("repuesto_id"))
 
     maquinas = escanear(tabla("T_MAQUINAS"))
     mant = escanear(tabla("T_MANTENIMIENTO"))
     resultados = escanear(tabla("T_RESULTADOS"))
     repuestos = escanear(tabla("T_REPUESTOS"))
-    pedidos = escanear(tabla("T_PEDIDOS_REPUESTO"))
+    pedidos = pedidos_abiertos(tabla("T_PEDIDOS_REPUESTO"))
 
     # ---- datos de apoyo ----
     ultimo_prev = defaultdict(float)
@@ -74,7 +94,7 @@ def lambda_handler(event, context):
         dias_hist = max(7, (date.fromisoformat(max(fechas)) - date.fromisoformat(min(fechas))).days + 1)
     else:
         dias_hist = 7
-    componentes = sorted({r["componente"] for r in repuestos})
+    componentes = sorted({comp_de(r) for r in repuestos if comp_de(r)})
     fallas = [{"componente": r["componente"], "fecha": r["fecha"]}
               for r in mant if r.get("falla") and r.get("componente")]
     riesgos = []
@@ -88,16 +108,14 @@ def lambda_handler(event, context):
 
     # ---- 3. reposicion ----
     stock = defaultdict(int)
-    rep_a_comp = {}
-    for r in repuestos:
-        stock[r["componente"]] += int(r["stock"])
-        rep_a_comp[r["repuesto_id"]] = r["componente"]
+    for r in repuestos:                      # stock sumado de todas las zonas
+        if comp_de(r):
+            stock[comp_de(r)] += int(r["stock"])
     pendientes = defaultdict(int)
-    for p in pedidos:
-        if p.get("estado") == "pendiente":
-            comp = p.get("componente") or rep_a_comp.get(p.get("repuesto_id"))
-            if comp:
-                pendientes[comp] += int(p.get("cantidad", 1))
+    for p in pedidos:                        # ya vienen filtrados: PENDIENTE y EN_PROCESO
+        comp = comp_de(p)
+        if comp:
+            pendientes[comp] += int(p.get("cantidad", 1))
     reposicion = []
     for comp in componentes:
         dem = float(por_comp.get(comp, {}).get("demanda_prevista", 0))

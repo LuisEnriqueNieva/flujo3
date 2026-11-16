@@ -52,7 +52,10 @@ def crear_maquinas(cfg, rng):
             "lon": z["lon"] + rng.uniform(-0.01, 0.01),
             "horas_uso": round(rng.uniform(*cfg["horas_uso_inicial"]), 1),
             "intervalo_mant_horas": m["intervalo_mant_horas"],
-            "estado": "operando",
+            "estado": "OPERATIVA",
+            "repuesto_requerido": next((r["repuesto_id"] for r in cfg["repuestos"] if causa and r["componente"] == causa["componente"]),
+                                       rng.choice(cfg["repuestos"])["repuesto_id"]),
+            "operador_email": "operador@example.com",
             "_falla_en_horas": falla_h,   # internos: no se envian como datos de la maquina
             "_causa": causa,
             "_factor_combustible": rng.uniform(*cfg["combustible_anomalo"]["factor"]) if i in ids_comb else 1.0,
@@ -179,23 +182,26 @@ def generar_resultados(cfg, maquinas, rng):
 
 
 def generar_tecnicos(cfg, rng):
+    """Tecnicos en el esquema del Flujo 2: PK zona + tecnico_id (cada zona queda con tecnicos)."""
     t = cfg["tecnicos"]
+    zonas = cfg["zonas"]
     return [{
+        "zona": zonas[i % len(zonas)]["nombre"],
         "tecnico_id": f"TEC-{i + 1:03d}",
+        "nombre": f"Tecnico {i + 1:03d}",
+        "email": f"tecnico{i + 1:03d}@example.com",
         "especialidad": rng.choice(t["especialidades"]),
-        "zona": rng.choice(cfg["zonas"])["nombre"],
-        "disponible": rng.random() < t["prob_disponible"],
+        "disponibilidad": "DISPONIBLE" if rng.random() < t["prob_disponible"] else "OCUPADO",
     } for i in range(t["cantidad"])]
 
 
 def generar_repuestos(cfg, rng):
+    """Repuestos en el esquema del Flujo 2: PK zona + repuesto_id (se agrega `componente` para el Flujo 3)."""
     filas = []
-    for i, r in enumerate(cfg["repuestos"]):
+    for r in cfg["repuestos"]:
         for z in cfg["zonas"]:
-            filas.append({
-                "repuesto_id": f"REP-{i + 1:03d}", "nombre": r["nombre"],
-                "componente": r["componente"], "almacen_zona": z["nombre"],
-                "stock": rng.randint(*r["stock"])})
+            filas.append({"zona": z["nombre"], "repuesto_id": r["repuesto_id"], "nombre": r["nombre"],
+                          "componente": r["componente"], "stock": rng.randint(*r["stock"])})
     return filas
 
 

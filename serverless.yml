@@ -35,6 +35,7 @@ provider:
     USO_DIARIO_HORAS: "8"
     UMBRAL_RIESGO_URGENTE: "0.7"
     UMBRAL_RIESGO_PREVENTIVO: "0.35"
+    REPUESTO_COMPONENTE: '{"REP-001":"motor","REP-002":"bomba_hidraulica","REP-003":"rodamiento"}'
     MAPA_VARIABLE_COMPONENTE: '{"temperatura":"motor","vibracion":"rodamiento","presion":"bomba_hidraulica"}'
 
 custom:
@@ -132,11 +133,11 @@ resources:
         TableName: t_repuestos
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
+          - {AttributeName: zona, AttributeType: S}
           - {AttributeName: repuesto_id, AttributeType: S}
-          - {AttributeName: almacen_zona, AttributeType: S}
         KeySchema:
-          - {AttributeName: repuesto_id, KeyType: HASH}
-          - {AttributeName: almacen_zona, KeyType: RANGE}
+          - {AttributeName: zona, KeyType: HASH}
+          - {AttributeName: repuesto_id, KeyType: RANGE}
 
     TablaPedidosRepuesto:
       Type: AWS::DynamoDB::Table
@@ -146,8 +147,16 @@ resources:
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - {AttributeName: pedido_id, AttributeType: S}
+          - {AttributeName: estado, AttributeType: S}
+          - {AttributeName: fecha, AttributeType: S}
         KeySchema:
           - {AttributeName: pedido_id, KeyType: HASH}
+        GlobalSecondaryIndexes:
+          - IndexName: EstadoFechaIndex
+            KeySchema:
+              - {AttributeName: estado, KeyType: HASH}
+              - {AttributeName: fecha, KeyType: RANGE}
+            Projection: {ProjectionType: ALL}
 
     # ---------- recursos PROPIOS del Flujo 3 ----------
     TablaIndicadores:

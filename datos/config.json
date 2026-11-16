@@ -19,19 +19,19 @@
   "ruido_ubicacion_grados": 0.0004,
   "zonas": [
     {
-      "nombre": "Obra Norte",
+      "nombre": "Lima Norte",
       "lat": -11.95,
       "lon": -77.05
     },
     {
-      "nombre": "Obra Sur",
-      "lat": -12.2,
-      "lon": -76.95
+      "nombre": "Lima Centro",
+      "lat": -12.05,
+      "lon": -77.04
     },
     {
-      "nombre": "Cantera Este",
-      "lat": -12.05,
-      "lon": -76.8
+      "nombre": "Lima Sur",
+      "lat": -12.2,
+      "lon": -76.95
     }
   ],
   "modelos": [
@@ -194,27 +194,30 @@
   },
   "repuestos": [
     {
-      "nombre": "kit de reparacion de motor",
+      "repuesto_id": "REP-001",
+      "nombre": "Filtro industrial",
       "componente": "motor",
       "stock": [
-        0,
-        3
-      ]
-    },
-    {
-      "nombre": "bomba hidraulica",
-      "componente": "bomba_hidraulica",
-      "stock": [
-        0,
+        2,
         4
       ]
     },
     {
-      "nombre": "kit de rodamientos",
+      "repuesto_id": "REP-002",
+      "nombre": "Bomba hidraulica",
+      "componente": "bomba_hidraulica",
+      "stock": [
+        0,
+        0
+      ]
+    },
+    {
+      "repuesto_id": "REP-003",
+      "nombre": "Kit de rodamientos",
       "componente": "rodamiento",
       "stock": [
         0,
-        8
+        6
       ]
     }
   ],
